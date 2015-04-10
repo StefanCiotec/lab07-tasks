@@ -36,25 +36,28 @@ static void bi_complete(struct bio *bio, int error)
 	char *buf;
 
 	/* TODO 4: read data (first 3 bytes) from bio buffer and print it */
-	bio_for_each_segment(bvec, bio, i) {
+	/* bio_for_each_segment_all(bvec, bio, i) {
 		buf = __bio_kmap_atomic(bio, i);
-		printk("%02x ", buf[0]);
-		printk("%02x ", buf[1]);
+		printk("%02x\n", buf[0]);
+		printk("%02x\n", buf[1]);
 		printk("%02x\n", buf[2]);
 		__bio_kunmap_atomic(buf);
-	}
+	} */
 	/* TODO 4: complete bio */
 	complete((struct completion*)bio->bi_private);
 
 }
 
 /* TODO 5: add direction parameter */
-static void send_test_bio(struct block_device *bdev)
+static void send_test_bio(struct block_device *bdev, int dir)
 {
 	struct bio *bio = bio_alloc(GFP_NOIO, 1);
 	struct completion event;
 	struct page *page;
 	char *buf;
+	char message[] = BIO_WRITE_MESSAGE;
+	struct bio_vec *bvec;
+	int i;
 
 	/* TODO 4: fill bio (bdev, sector, endio, direction, completion) */
 	init_completion(&event);
@@ -63,7 +66,7 @@ static void send_test_bio(struct block_device *bdev)
 	bio->bi_sector = 0;
 	bio->bi_private = &event;
 	bio->bi_end_io = bi_complete;
-	bio->bi_rw = BIO_DIR_READ;
+	bio->bi_rw = dir;
 
 	page = alloc_page(GFP_NOIO);
 	bio_add_page(bio, page, KERNEL_SECTOR_SIZE, 0);
@@ -71,12 +74,17 @@ static void send_test_bio(struct block_device *bdev)
 	bio->bi_idx = 0;
 
 	/* TODO 5: write message to bio buffer if direction is write */
-	//char *buf;
-	//memcpy(&
+	if (dir == BIO_DIR_WRITE) {
+		bio_for_each_segment_all(bvec, bio, i) {
+			buf = __bio_kmap_atomic(bio,  i);
+			memcpy(buf, message, sizeof(message));
+			__bio_kunmap_atomic(buf);
+		}
+	}
 
 
 	/* TODO 4: submit bio and wait for completion */
-	submit_bio(0, bio);
+	submit_bio(dir, bio);
 	wait_for_completion(&event);
 
 
@@ -103,7 +111,7 @@ static int __init relay_init(void)
 		return -EINVAL;
 	}
 
-	send_test_bio(phys_bdev);
+	send_test_bio(phys_bdev, BIO_DIR_READ);
 
 	return 0;
 }
@@ -120,7 +128,7 @@ static void close_disk(struct block_device *bdev)
 static void __exit relay_exit(void)
 {
 	/* TODO 5: send test write bio */
-
+	send_test_bio(phys_bdev, BIO_DIR_WRITE);
 	close_disk(phys_bdev);
 }
 

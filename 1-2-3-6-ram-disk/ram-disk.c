@@ -27,7 +27,7 @@ MODULE_LICENSE("GPL");
 #define KERNEL_SECTOR_SIZE	512
 
 /* TODO 6: use bios for read/write requests */
-#define USE_BIO_TRANSFER	0
+#define USE_BIO_TRANSFER	1	
 
 
 static struct my_block_dev {
@@ -77,10 +77,18 @@ static unsigned long my_xfer_request(struct my_block_dev *dev,
 	unsigned long nbytes = 0;
 	struct bio_vec *bvec;
 	struct req_iterator iter;
+	char *buffer;
+	sector_t sector;
 
 	/* TODO 6: iterate segments */
-
-	/* TODO 6: copy bio data to device buffer */
+	rq_for_each_segment(bvec, req, iter) {
+		buffer = __bio_kmap_atomic(iter.bio, iter.i);
+		sector = iter.bio->bi_sector;
+		my_block_tranfer(dev, sector, iter.bio->bi_size,
+				 buffer, bio_data_dir(iter.bio) == 1);
+		__bio_kunmap_atomic(iter.bio);
+		nbytes += iter.bio->bi_size;
+	}
 
 	return nbytes;
 }
@@ -114,6 +122,7 @@ static void my_block_request(struct request_queue *q)
 
 #if USE_BIO_TRANSFER == 1
 		/* TODO 6: process the request by calling my_xfer_request */
+		my_xfer_request(dev, rq);
 #else
 		/* TODO 3: process the request by calling my_block_transfer */
 		my_block_transfer(dev, blk_rq_pos(rq), blk_rq_cur_bytes(rq),
